@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>실시간 OX 퀴즈</title>
+<style>
+:root{--bg:#f6f5f1;--card:#fff;--ink:#1d1d1b;--mute:#6b6a65;--line:#e3e1da;--o:#1f7ae0;--x:#e0452f;--ok:#1a8f4c;--accent:#1d1d1b;--accent-ink:#fff}
+@media (prefers-color-scheme:dark){:root{--bg:#151514;--card:#1f1f1d;--ink:#f1efe8;--mute:#a09e96;--line:#34332f;--o:#5aa2ff;--x:#ff7a64;--ok:#4cc982;--accent:#f1efe8;--accent-ink:#151514}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Noto Sans KR","Malgun Gothic",sans-serif;line-height:1.5;padding:env(safe-area-inset-top,0px) 0 env(safe-area-inset-bottom,0px)}
+main{max-width:640px;margin:0 auto;padding:16px}
+h1{font-size:22px;margin:4px 0 2px}
+.sub{color:var(--mute);font-size:13px;margin:0 0 14px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px;margin-bottom:14px}
+.card h2{font-size:13px;color:var(--mute);margin:0 0 10px;font-weight:600}
+.hidden{display:none!important}
+input,textarea{width:100%;font:inherit;font-size:16px;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+textarea{resize:vertical;min-height:64px}
+button{font:inherit;cursor:pointer;border:0;border-radius:10px;padding:10px 16px;background:var(--accent);color:var(--accent-ink);font-weight:600}
+button:disabled{opacity:.4;cursor:not-allowed}
+button:focus-visible,input:focus-visible,textarea:focus-visible{outline:3px solid var(--o);outline-offset:2px}
+button.ghost{background:transparent;color:var(--mute);border:1px solid var(--line);font-weight:500}
+.row{display:flex;gap:8px;align-items:center}
+.row>*{flex:1}.row>.fix{flex:0 0 84px}
+.q{font-size:22px;font-weight:700;margin:6px 0 14px;word-break:keep-all;overflow-wrap:anywhere}
+.ox{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.ox button{font-size:64px;line-height:1;padding:26px 0;border:3px solid transparent;background:var(--bg);font-weight:800}
+.ox .o{color:var(--o)}.ox .x{color:var(--x)}
+.ox button.sel.o{border-color:var(--o);background:color-mix(in srgb,var(--o) 14%,var(--card))}
+.ox button.sel.x{border-color:var(--x);background:color-mix(in srgb,var(--x) 14%,var(--card))}
+.ox button.right{outline:4px solid var(--ok)}
+.msg{margin-top:12px;font-weight:600}
+.msg.good{color:var(--ok)}.msg.bad{color:var(--x)}.msg.dim{color:var(--mute);font-weight:500}
+.bar{display:flex;height:10px;border-radius:6px;overflow:hidden;background:var(--line);margin-top:10px}
+.bar i{display:block}.bar .bo{background:var(--o)}.bar .bx{background:var(--x)}
+.cnt{display:flex;justify-content:space-between;font-size:13px;color:var(--mute);margin-top:4px}
+ol{list-style:none;margin:0;padding:0}
+li.p{display:flex;align-items:center;gap:10px;padding:9px 6px;border-bottom:1px solid var(--line)}
+li.p:last-child{border-bottom:0}
+li.p .rk{width:34px;font-weight:700;color:var(--mute);text-align:center}
+li.p .nm{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+li.p .sc{font-weight:800;font-variant-numeric:tabular-nums}
+li.p .tag{font-size:13px;width:22px;text-align:center;font-weight:700}
+li.p .tag.o{color:var(--o)}li.p .tag.x{color:var(--x)}
+li.me{background:color-mix(in srgb,var(--o) 12%,transparent);border-radius:10px}
+.note{font-size:12px;color:var(--mute);margin-top:8px}
+.err{color:var(--x);font-size:13px;margin-top:6px}
+</style>
+</head>
+<body>
+<main>
+  <h1 id="title">실시간 OX 퀴즈</h1>
+  <p class="sub" id="status">연결 중…</p>
+
+  <section class="card hidden" id="login">
+    <h2>사회자 로그인</h2>
+    <div class="row">
+      <input id="pwIn" type="password" placeholder="사회자 비밀번호" autocomplete="current-password">
+      <button class="fix" id="btnLogin">로그인</button>
+    </div>
+    <div class="err hidden" id="loginErr"></div>
+  </section>
+
+  <section class="card hidden" id="host">
+    <h2>사회자 패널</h2>
+    <textarea id="qIn" placeholder="문제를 입력하세요. 즉석에서 계속 추가할 수 있어요."></textarea>
+    <div class="row" style="margin-top:8px">
+      <div class="fix"><input id="ptIn" type="number" min="1" value="1" title="배점"></div>
+      <button id="btnAsk">문제 내기</button>
+    </div>
+    <div id="hostLive" class="hidden" style="margin-top:14px">
+      <div class="note" id="hostQ" style="margin:0 0 6px"></div>
+      <div class="row">
+        <button id="btnO" style="background:var(--o);color:#fff">정답 공개: O</button>
+        <button id="btnX" style="background:var(--x);color:#fff">정답 공개: X</button>
+      </div>
+      <div class="bar"><i class="bo" id="hbO"></i><i class="bx" id="hbX"></i></div>
+      <div class="cnt"><span id="hcO"></span><span id="hcX"></span></div>
+    </div>
+    <div style="margin-top:14px"><button class="ghost" id="btnReset">게임 초기화</button></div>
+  </section>
+
+  <section class="card hidden" id="join">
+    <h2>참가하기</h2>
+    <div class="row">
+      <input id="nameIn" maxlength="16" placeholder="닉네임" autocomplete="nickname">
+      <button class="fix" id="btnJoin">입장</button>
+    </div>
+  </section>
+
+  <section class="card hidden" id="play">
+    <h2 id="roundLbl">대기 중</h2>
+    <div class="q" id="qText">사회자가 문제를 내면 여기에 나타나요.</div>
+    <div class="ox">
+      <button class="o" id="pickO">O</button>
+      <button class="x" id="pickX">X</button>
+    </div>
+    <div class="msg dim" id="msg"></div>
+    <div id="dist" class="hidden">
+      <div class="bar"><i class="bo" id="bO"></i><i class="bx" id="bX"></i></div>
+      <div class="cnt"><span id="cO"></span><span id="cX"></span></div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>실시간 순위 (<span id="pcount">0</span>명)</h2>
+    <ol id="board"></ol>
+    <div class="note" id="boardNote"></div>
+  </section>
+</main>
+
+<script>
+(function(){
+  var $ = function(id){return document.getElementById(id)};
+  var isHostPage = location.pathname.replace(/\/+$/,"") === "/host";
+  var S = null;           // 서버에서 받은 최신 상태
+  var ws = null, connected = false, retry = 0;
+
+  function store(k, v){ try{ if(v===undefined) return localStorage.getItem(k); localStorage.setItem(k,v);}catch(e){return null;} }
+  function sstore(k, v){ try{ if(v===undefined) return sessionStorage.getItem(k); if(v===null) sessionStorage.removeItem(k); else sessionStorage.setItem(k,v);}catch(e){return null;} }
+
+  var pid = store("ox_pid");
+  if(!pid){
+    pid = (window.crypto && crypto.randomUUID) ? crypto.randomUUID() :
+      (Date.now().toString(36)+Math.random().toString(36).slice(2)+Math.random().toString(36).slice(2));
+    store("ox_pid", pid);
+  }
+
+  function send(o){ if(ws && ws.readyState===1) ws.send(JSON.stringify(o)); }
+
+  function connect(){
+    var proto = location.protocol==="https:" ? "wss://" : "ws://";
+    ws = new WebSocket(proto+location.host+"/ws");
+    ws.onopen = function(){
+      connected = true; retry = 0;
+      var nm = store("ox_name");
+      if(!isHostPage && nm) send({t:"join", pid:pid, name:nm});
+      var pw = sstore("ox_pw");
+      if(isHostPage && pw) send({t:"auth", pw:pw});
+      render();
+    };
+    ws.onmessage = function(e){
+      var m; try{ m = JSON.parse(e.data); }catch(x){ return; }
+      if(m.t==="state"){ S = m; render(); }
+      else if(m.t==="authFail"){
+        sstore("ox_pw", null);
+        $("loginErr").textContent = "비밀번호가 맞지 않거나 서버에 설정되지 않았어요.";
+        $("loginErr").classList.remove("hidden");
+        $("btnLogin").disabled = false;
+      }
+    };
+    ws.onclose = function(){
+      connected = false; render();
+      retry++; setTimeout(connect, Math.min(5000, 800*retry));
+    };
+    ws.onerror = function(){ try{ ws.close(); }catch(e){} };
+  }
+
+  function rankMark(r){ return r===1?"🥇":r===2?"🥈":r===3?"🥉":String(r); }
+
+  function render(){
+    $("status").textContent = !connected ? "연결이 끊겼어요. 다시 연결하는 중…"
+      : (isHostPage ? (S&&S.host ? "사회자 모드" : "사회자 로그인이 필요해요") : "접속 완료");
+    if(isHostPage) $("title").textContent = "실시간 OX 퀴즈 · 사회자";
+    if(!S) return;
+
+    var g = S.game, open = g.phase==="open", rev = g.phase==="revealed", n = g.round;
+    var me = S.me;
+
+    $("login").classList.toggle("hidden", !(isHostPage && !S.host));
+    $("host").classList.toggle("hidden", !(isHostPage && S.host));
+    $("join").classList.toggle("hidden", isHostPage || !!me);
+    $("play").classList.toggle("hidden", isHostPage || !me);
+
+    if(isHostPage && S.host){
+      $("hostLive").classList.toggle("hidden", !n);
+      $("hostQ").textContent = n ? (n+"번 · "+g.question+" ("+g.pts+"점)") : "";
+      $("btnO").disabled = $("btnX").disabled = !open;
+      var c0 = S.counts || {o:0,x:0}, t0 = (c0.o+c0.x)||1;
+      $("hbO").style.width = (c0.o/t0*100)+"%"; $("hbX").style.width = (c0.x/t0*100)+"%";
+      $("hcO").textContent = "O "+c0.o+"명"; $("hcX").textContent = "X "+c0.x+"명";
+    }
+
+    if(!isHostPage && me){
+      var pick = me.pick;
+      $("roundLbl").textContent = n ? (n+"번 문제"+(rev?" · 결과":"")) : "대기 중";
+      $("qText").textContent = n ? g.question : "사회자가 문제를 내면 여기에 나타나요.";
+      ["O","X"].forEach(function(c){
+        var b = $("pick"+c);
+        b.disabled = !open;
+        b.classList.toggle("sel", pick===c);
+        b.classList.toggle("right", rev && g.correct===c);
+      });
+      var m = $("msg"); m.className = "msg dim";
+      if(!n) m.textContent = "";
+      else if(open) m.textContent = pick ? ("내 선택: "+pick+" (정답 공개 전까지 바꿀 수 있어요)") : "O 또는 X를 눌러주세요.";
+      else if(rev){
+        if(!pick) m.textContent = "정답은 "+g.correct+". 이번 문제는 응답하지 않았어요.";
+        else if(pick===g.correct){ m.className="msg good"; m.textContent = "정답! +"+g.pts+"점"; }
+        else { m.className="msg bad"; m.textContent = "아쉬워요. 정답은 "+g.correct+"예요."; }
+      }
+      var showDist = rev && S.counts;
+      $("dist").classList.toggle("hidden", !showDist);
+      if(showDist){
+        var c = S.counts, t = (c.o+c.x)||1;
+        $("bO").style.width = (c.o/t*100)+"%"; $("bX").style.width = (c.x/t*100)+"%";
+        $("cO").textContent = "O "+c.o+"명"; $("cX").textContent = "X "+c.x+"명";
+      }
+    }
+
+    // 순위표
+    var list = S.players.slice().sort(function(a,b){ return b.score-a.score || a.name.localeCompare(b.name); });
+    $("pcount").textContent = list.length;
+    var ol = $("board"); ol.textContent = "";
+    var rank = 0, prev = null;
+    list.forEach(function(p,i){
+      if(p.score!==prev){ rank = i+1; prev = p.score; }
+      var isMe = me && me.sid===p.sid;
+      var li = document.createElement("li"); li.className = "p"+(isMe?" me":"");
+      var rk = document.createElement("span"); rk.className = "rk"; rk.textContent = rankMark(rank);
+      var nm = document.createElement("span"); nm.className = "nm"; nm.textContent = p.name+(isMe?" (나)":"");
+      var tg = document.createElement("span"); tg.className = "tag";
+      if(open){ tg.textContent = p.done ? "✓" : "·"; }
+      else if(rev && p.pick){ tg.textContent = p.pick; tg.classList.add(p.pick==="O"?"o":"x"); }
+      var sc = document.createElement("span"); sc.className = "sc"; sc.textContent = p.score+"점";
+      li.appendChild(rk); li.appendChild(nm); li.appendChild(tg); li.appendChild(sc);
+      ol.appendChild(li);
+    });
+    $("boardNote").textContent = !list.length ? "아직 참가자가 없어요." : (open ? "✓는 이번 문제에 응답한 사람이에요." : "");
+  }
+
+  // ----- 버튼 연결 -----
+  $("btnJoin").onclick = function(){
+    var name = $("nameIn").value.trim(); if(!name) return;
+    store("ox_name", name);
+    send({t:"join", pid:pid, name:name});
+  };
+  $("nameIn").onkeydown = function(e){ if(e.key==="Enter") $("btnJoin").click(); };
+  ["O","X"].forEach(function(c){
+    $("pick"+c).onclick = function(){ send({t:"pick", c:c}); };
+  });
+
+  $("btnLogin").onclick = function(){
+    var pw = $("pwIn").value; if(!pw) return;
+    $("loginErr").classList.add("hidden");
+    sstore("ox_pw", pw);
+    send({t:"auth", pw:pw});
+  };
+  $("pwIn").onkeydown = function(e){ if(e.key==="Enter") $("btnLogin").click(); };
+
+  $("btnAsk").onclick = function(){
+    var q = $("qIn").value.trim(); if(!q) return;
+    send({t:"ask", question:q, pts:parseInt($("ptIn").value,10)||1});
+    $("qIn").value = "";
+  };
+  ["O","X"].forEach(function(c){
+    $("btn"+c).onclick = function(){ send({t:"reveal", c:c}); };
+  });
+
+  var armed = false, tm = null;
+  $("btnReset").onclick = function(){
+    var b = $("btnReset");
+    if(!armed){
+      armed = true; b.textContent = "정말 초기화할까요? 한 번 더 누르세요";
+      tm = setTimeout(function(){ armed=false; b.textContent="게임 초기화"; }, 4000);
+      return;
+    }
+    clearTimeout(tm); armed = false; b.textContent = "게임 초기화";
+    send({t:"reset"});
+  };
+
+  render();
+  connect();
+})();
+</script>
+</body>
+</html>
